@@ -25,11 +25,27 @@ CREDS_PATH = "credentials.json"
 
 
 def get_service():
-    # TODO: load cached creds from TOKEN_PATH, refresh or run InstalledAppFlow as needed,
-    # cache back to TOKEN_PATH, return build("gmail", "v1", credentials=creds)
-    raise NotImplementedError
+    creds = None
+    if os.path.exists(TOKEN_PATH):
+        creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
+
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(CREDS_PATH, SCOPES)
+            creds = flow.run_local_server(port=0)
+        with open(TOKEN_PATH, "w") as f:
+            f.write(creds.to_json())
+
+    return build("gmail", "v1", credentials=creds)
 
 
 def send_email(to: str, subject: str, body: str) -> dict:
-    # TODO: build MIMEText message, base64url-encode, send via Gmail API
-    raise NotImplementedError
+    message = MIMEText(body)
+    message["to"] = to
+    message["subject"] = subject
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+    service = get_service()
+    return service.users().messages().send(userId="me", body={"raw": raw}).execute()

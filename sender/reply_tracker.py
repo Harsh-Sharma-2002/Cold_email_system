@@ -7,9 +7,28 @@ from sender.gmail_client import get_service
 
 
 def check_replies():
-    # TODO: for each generated_emails row with status='sent', fetch its Gmail thread
-    # TODO: if the thread has more than one message, mark status='replied'
-    raise NotImplementedError
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT id, gmail_thread_id FROM generated_emails "
+            "WHERE status = 'sent' AND gmail_thread_id IS NOT NULL"
+        ).fetchall()
+        if not rows:
+            return
+
+        service = get_service()
+        for row in rows:
+            thread = service.users().threads().get(
+                userId="me", id=row["gmail_thread_id"]
+            ).execute()
+            if len(thread.get("messages", [])) > 1:
+                conn.execute(
+                    "UPDATE generated_emails SET status = 'replied' WHERE id = ?",
+                    (row["id"],),
+                )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":
