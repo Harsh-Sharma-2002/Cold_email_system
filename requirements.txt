@@ -1,0 +1,8 @@
+python-dotenv
+requests
+trafilatura
+tavily-python
+openai
+streamlit
+google-auth-oauthlib
+google-api-python-client

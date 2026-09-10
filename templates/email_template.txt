@@ -1,0 +1,10 @@
+Hi {name},
+
+I noticed {hook} — {reason_it_caught_my_eye}.
+
+Recently I built {project}, which touches on similar problems ({relevant_skill}).
+
+{cta}
+
+Thanks,
+{your_name}

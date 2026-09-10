@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+leads.db
+credentials.json
+token.json
+.venv/
+venv/
