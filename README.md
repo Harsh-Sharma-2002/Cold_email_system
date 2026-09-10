@@ -40,24 +40,46 @@ resume.txt                                 plain-text background the LLM reads e
    writes. Separately, drop an actual resume PDF at the path in
    `RESUME_ATTACHMENT_PATH` (defaults to `resume.pdf`) — it's attached to
    every email the sender sends, if present.
-4. `python db/db.py` — creates `leads.db` from `schema.sql`.
+4. `python -m db.db` — creates `leads.db` from `schema.sql`.
 5. Add companies to work through. Simplest way to start: open `leads.db` in any
    SQLite browser (e.g. DB Browser for SQLite) and add rows to `companies`
    (name, website) by hand or CSV import. A proper CSV-import script is a
    natural thing to add once the rest works end-to-end.
-6. `python pipeline/run_pipeline.py` — runs research → extract → generate →
-   critique over whatever's ready at each stage.
-7. **Contacts**: the pipeline pattern-guesses an email once you give it a
-   name/title (see `pipeline/contacts.py: add_contact`). Nothing here
-   auto-discovers names yet — wire that up to however you're sourcing them
-   (LinkedIn, a team page you read yourself, or `verify_with_provider` to
-   spend an Apollo/Hunter credit).
+6. `python -m pipeline.run_pipeline` — runs research → extract → find
+   contacts → verify → generate → critique over whatever's ready at each
+   stage. (Run as a module, not `python pipeline/run_pipeline.py` — the
+   `db`/`providers` imports need the project root on `sys.path`, which only
+   `-m` guarantees.)
+7. **Contacts** are now automatic: `find_contacts` does a free (0-credit)
+   Apollo people-search per company against `APOLLO_SEARCH_TITLES`, then up
+   to `MAX_VERIFY_PER_COMPANY` of those candidates get their email revealed
+   via `verify_with_provider` (1 Apollo credit each — that cap is what
+   bounds credit spend per company per run). You can still add a contact by
+   hand with `pipeline/contacts.py: add_contact` if you already have a
+   name/title from somewhere (LinkedIn, a team page).
 8. `streamlit run dashboard/app.py` — review, edit, approve, or reject.
-9. `python sender/send_approved.py` — sends only what you approved. Caps
+9. `python -m sender.send_approved` — sends only what you approved. Caps
    itself at `MAX_PER_RUN` per run; raise that slowly as your sending
    reputation builds.
-10. `python sender/reply_tracker.py` — run this periodically (cron, or just
+10. `python -m sender.reply_tracker` — run this periodically (cron, or just
     by hand) to flag threads that got a reply.
+
+## Running it unattended (cron)
+
+`scripts/` holds thin wrappers cron can call directly — each `cd`s into the
+project, uses `.venv/bin/python`, and appends to `logs/`:
+
+```
+scripts/run_pipeline.sh    research → extract → find contacts → verify → generate → critique
+scripts/send_approved.sh   sends whatever you've already clicked Approve on
+scripts/reply_tracker.sh   polls sent threads for replies
+```
+
+Install them with `crontab -e` (see `scripts/crontab.example` for the exact
+lines this repo uses: pipeline every 6h, send every hour, replies daily).
+Sending is still gated on your approval in the dashboard — cron only
+delivers what's already marked `approved`, it never approves anything
+itself.
 
 ## Adding an API key when one runs out
 

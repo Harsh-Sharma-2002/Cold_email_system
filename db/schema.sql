@@ -41,8 +41,10 @@ CREATE TABLE IF NOT EXISTS contacts (
     linkedin TEXT,
     email TEXT,
     email_verified BOOLEAN DEFAULT 0,
-    source TEXT,                  -- 'pattern_guess' | 'apollo' | 'hunter' | 'manual'
+    source TEXT,                  -- 'pattern_guess' | 'apollo_search' | 'apollo' | 'hunter' | 'manual'
     confidence REAL,
+    external_id TEXT,             -- provider's person id (e.g. Apollo), set by apollo_search,
+                                   -- used to enrich-by-id later without spending a match credit on name lookup
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

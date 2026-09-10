@@ -1,0 +1,6 @@
+# Cold email pipeline — installed via `crontab -e`.
+# Pipeline every 6h, send-approved hourly (only delivers what you've
+# clicked Approve on in the dashboard), replies checked daily at 08:00.
+0 */6 * * * /Users/harshsharma/Desktop/Work_Dir/cold_email/scripts/run_pipeline.sh
+0 * * * * /Users/harshsharma/Desktop/Work_Dir/cold_email/scripts/send_approved.sh
+0 8 * * * /Users/harshsharma/Desktop/Work_Dir/cold_email/scripts/reply_tracker.sh
