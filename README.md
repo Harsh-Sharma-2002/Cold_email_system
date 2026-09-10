@@ -30,12 +30,11 @@ resume.txt                                 plain-text background the LLM reads e
 ## Setup
 
 1. `pip install -r requirements.txt`
-2. `cp .env.example .env` and fill in: Tavily key, your Groq API key, your
-   first Apollo/Hunter key. `LLM_BASE_URL`/`LLM_MODEL` default to Groq
-   (`openai/gpt-oss-120b`). If a local Ollama is running with `ollama pull
-   qwen3:8b`, `FALLBACK_LLM_*` is already pointed at it — any primary call
-   that errors out (rate limit, outage) retries once against the fallback
-   automatically. Leave `FALLBACK_LLM_BASE_URL` blank to disable that.
+2. `cp .env.example .env` and fill in: Tavily key, your first Apollo/Hunter
+   key. `LLM_BASE_URL`/`LLM_MODEL` default to a local Ollama running Qwen3
+   8B (free, no key) — install Ollama, then `ollama pull qwen3:8b`. Swap to
+   a hosted provider later by editing those three `LLM_*` vars — no code
+   changes.
 3. Write a few paragraphs of plain-text background into `resume.txt` — skills,
    projects, what you're looking for. The LLM reads this on every email it
    writes. Separately, drop an actual resume PDF at the path in
