@@ -23,6 +23,25 @@ EMAIL BODY:
 
 
 def critique_email(email_id: int):
-    # TODO: load email + its company's research, build CRITIC_PROMPT, call chat_json
-    # TODO: store parsed result JSON into generated_emails.critic_notes
-    raise NotImplementedError
+    conn = get_conn()
+    try:
+        email = conn.execute(
+            "SELECT * FROM generated_emails WHERE id = ?", (email_id,)
+        ).fetchone()
+        research = conn.execute(
+            "SELECT * FROM research WHERE company_id = ?", (email["company_id"],)
+        ).fetchone()
+        research_text = json.dumps(dict(research), indent=2) if research else "(none yet)"
+
+        prompt = CRITIC_PROMPT.format(
+            research=research_text, subject=email["subject"], body=email["body"]
+        )
+        result = json.loads(chat_json([{"role": "user", "content": prompt}]))
+
+        conn.execute(
+            "UPDATE generated_emails SET critic_notes = ? WHERE id = ?",
+            (json.dumps(result), email_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()

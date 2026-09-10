@@ -15,5 +15,9 @@ _client = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
 
 def search_company(company_name: str, extra_terms: str = "", max_results: int = 5):
     """Returns a list of {title, url, content} dicts."""
-    # TODO: build query, call _client.search, map results to {title, url, content}
-    raise NotImplementedError
+    query = f"{company_name} {extra_terms}".strip()
+    results = _client.search(query, max_results=max_results)
+    return [
+        {"title": r.get("title"), "url": r.get("url"), "content": r.get("content")}
+        for r in results.get("results", [])
+    ]

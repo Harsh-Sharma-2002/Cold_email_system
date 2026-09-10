@@ -15,13 +15,18 @@ SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 
 def get_conn():
-    # TODO: connect, set row_factory = sqlite3.Row, enable foreign_keys
-    raise NotImplementedError
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
 
 
 def init_db():
-    # TODO: run schema.sql against DB_PATH
-    raise NotImplementedError
+    conn = get_conn()
+    with open(SCHEMA_PATH) as f:
+        conn.executescript(f.read())
+    conn.commit()
+    conn.close()
 
 
 if __name__ == "__main__":

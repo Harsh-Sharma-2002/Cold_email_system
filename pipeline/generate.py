@@ -32,6 +32,33 @@ RESEARCH:
 
 
 def generate_email(company_id: int, contact_id: int):
-    # TODO: load contact + research, build GENERATE_PROMPT, call chat() for JSON
-    # TODO: insert generated_emails row (status='generated'), mark company status='email_generated'
-    raise NotImplementedError
+    conn = get_conn()
+    try:
+        contact = conn.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,)).fetchone()
+        research = conn.execute(
+            "SELECT * FROM research WHERE company_id = ?", (company_id,)
+        ).fetchone()
+        research_text = json.dumps(dict(research), indent=2) if research else "(none yet)"
+
+        prompt = GENERATE_PROMPT.format(
+            template=TEMPLATE,
+            resume=RESUME,
+            contact_name=contact["name"],
+            contact_title=contact["title"],
+            research=research_text,
+        )
+        result = json.loads(chat([{"role": "user", "content": prompt}]))
+
+        conn.execute(
+            """
+            INSERT INTO generated_emails (company_id, contact_id, subject, body, status)
+            VALUES (?, ?, ?, ?, 'generated')
+            """,
+            (company_id, contact_id, result["subject"], result["body"]),
+        )
+        conn.execute(
+            "UPDATE companies SET status = 'email_generated' WHERE id = ?", (company_id,)
+        )
+        conn.commit()
+    finally:
+        conn.close()

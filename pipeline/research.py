@@ -11,7 +11,28 @@ PAGES_TO_TRY = ["", "/about", "/careers", "/blog", "/engineering"]
 
 
 def research_company(company_id: int, name: str, website: str | None):
-    # TODO: search_company -> insert evidence rows (source='search')
-    # TODO: for each PAGES_TO_TRY path off website -> fetch_page_text -> insert evidence (source='website')
-    # TODO: mark company status='researched', last_researched=now
-    raise NotImplementedError
+    conn = get_conn()
+    try:
+        for r in search_company(name):
+            conn.execute(
+                "INSERT INTO evidence (company_id, source, url, raw_content) VALUES (?, 'search', ?, ?)",
+                (company_id, r["url"], r["content"]),
+            )
+
+        if website:
+            base = website.rstrip("/")
+            for path in PAGES_TO_TRY:
+                text = fetch_page_text(base + path)
+                if text:
+                    conn.execute(
+                        "INSERT INTO evidence (company_id, source, url, raw_content) VALUES (?, 'website', ?, ?)",
+                        (company_id, base + path, text),
+                    )
+
+        conn.execute(
+            "UPDATE companies SET status = 'researched', last_researched = CURRENT_TIMESTAMP WHERE id = ?",
+            (company_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()

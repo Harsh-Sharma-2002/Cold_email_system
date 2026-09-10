@@ -23,13 +23,12 @@ _MODEL = os.environ["LLM_MODEL"]
 
 def chat(messages, **kwargs) -> str:
     """messages: standard OpenAI-style [{"role": ..., "content": ...}, ...]"""
-    # TODO: call _client.chat.completions.create and return the message content
-    raise NotImplementedError
+    resp = _client.chat.completions.create(model=_MODEL, messages=messages, **kwargs)
+    return resp.choices[0].message.content
 
 
 def chat_json(messages, **kwargs) -> str:
     """Same as chat(), but asks the provider to return a JSON object.
     Supported by Groq and recent Ollama builds — use for extraction,
     ranking, and critic steps where you want structured output back."""
-    # TODO: delegate to chat() with response_format={"type": "json_object"}
-    raise NotImplementedError
+    return chat(messages, response_format={"type": "json_object"}, **kwargs)

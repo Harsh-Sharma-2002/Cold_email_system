@@ -11,5 +11,9 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; student-research-bot/0.1)"}
 
 
 def fetch_page_text(url: str, timeout: int = 10):
-    # TODO: GET url, return None on request failure, else trafilatura.extract(resp.text)
-    raise NotImplementedError
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=timeout)
+        resp.raise_for_status()
+    except requests.RequestException:
+        return None
+    return trafilatura.extract(resp.text)
