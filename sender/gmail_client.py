@@ -8,7 +8,11 @@ Gmail sending + reading, official API, OAuth. One-time setup:
 pip install google-auth-oauthlib google-api-python-client
 """
 import base64
+import mimetypes
 import os
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -22,6 +26,10 @@ SCOPES = [
 ]
 TOKEN_PATH = "token.json"
 CREDS_PATH = "credentials.json"
+
+# Attached to every outgoing email when the file exists — drop your resume
+# PDF here (or point RESUME_ATTACHMENT_PATH at it in .env).
+RESUME_PATH = os.environ.get("RESUME_ATTACHMENT_PATH", "resume.pdf")
 
 
 def get_service():
@@ -42,7 +50,26 @@ def get_service():
 
 
 def send_email(to: str, subject: str, body: str) -> dict:
-    message = MIMEText(body)
+    if os.path.exists(RESUME_PATH):
+        message = MIMEMultipart()
+        message.attach(MIMEText(body))
+
+        ctype, encoding = mimetypes.guess_type(RESUME_PATH)
+        if ctype is None or encoding is not None:
+            ctype = "application/octet-stream"
+        maintype, subtype = ctype.split("/", 1)
+
+        with open(RESUME_PATH, "rb") as f:
+            part = MIMEBase(maintype, subtype)
+            part.set_payload(f.read())
+        encoders.encode_base64(part)
+        part.add_header(
+            "Content-Disposition", "attachment", filename=os.path.basename(RESUME_PATH)
+        )
+        message.attach(part)
+    else:
+        message = MIMEText(body)
+
     message["to"] = to
     message["subject"] = subject
     raw = base64.urlsafe_b64encode(message.as_bytes()).decode()

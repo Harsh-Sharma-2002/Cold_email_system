@@ -30,10 +30,17 @@ resume.txt                                 plain-text background the LLM reads e
 ## Setup
 
 1. `pip install -r requirements.txt`
-2. `cp .env.example .env` and fill in: Tavily key, Groq or Ollama config, your
-   first Apollo/Hunter key.
+2. `cp .env.example .env` and fill in: Tavily key, your Groq API key, your
+   first Apollo/Hunter key. `LLM_BASE_URL`/`LLM_MODEL` default to Groq
+   (`openai/gpt-oss-120b`). If a local Ollama is running with `ollama pull
+   qwen3:8b`, `FALLBACK_LLM_*` is already pointed at it — any primary call
+   that errors out (rate limit, outage) retries once against the fallback
+   automatically. Leave `FALLBACK_LLM_BASE_URL` blank to disable that.
 3. Write a few paragraphs of plain-text background into `resume.txt` — skills,
-   projects, what you're looking for. The LLM reads this on every email it writes.
+   projects, what you're looking for. The LLM reads this on every email it
+   writes. Separately, drop an actual resume PDF at the path in
+   `RESUME_ATTACHMENT_PATH` (defaults to `resume.pdf`) — it's attached to
+   every email the sender sends, if present.
 4. `python db/db.py` — creates `leads.db` from `schema.sql`.
 5. Add companies to work through. Simplest way to start: open `leads.db` in any
    SQLite browser (e.g. DB Browser for SQLite) and add rows to `companies`
