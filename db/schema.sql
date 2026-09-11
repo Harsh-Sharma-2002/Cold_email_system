@@ -8,7 +8,27 @@ CREATE TABLE IF NOT EXISTS companies (
     domain TEXT,
     status TEXT NOT NULL DEFAULT 'new',
     last_researched TIMESTAMP,
+    greenhouse_board_token TEXT,  -- the slug in boards.greenhouse.io/{token}, once discovered
+    greenhouse_checked_at TIMESTAMP,  -- when we last tried to find/refresh this, even if it failed
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Open roles pulled from a company's public Greenhouse job board (read-only,
+-- no API key needed — see providers/greenhouse.py). Lets outreach reference
+-- an actual open req instead of a generic "interested in engineering roles".
+CREATE TABLE IF NOT EXISTS jobs (
+    id INTEGER PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id),
+    greenhouse_job_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT,
+    department TEXT,
+    location TEXT,
+    description TEXT,             -- stripped job description HTML->text, for matching + email hooks
+    status TEXT NOT NULL DEFAULT 'new',  -- new | targeted | closed
+    first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(company_id, greenhouse_job_id)
 );
 
 -- Never throw away retrieved data. If prompts improve later, rerun
@@ -52,6 +72,7 @@ CREATE TABLE IF NOT EXISTS generated_emails (
     id INTEGER PRIMARY KEY,
     company_id INTEGER NOT NULL REFERENCES companies(id),
     contact_id INTEGER NOT NULL REFERENCES contacts(id),
+    job_id INTEGER REFERENCES jobs(id),  -- specific open role this email is about, if any
     subject TEXT,
     body TEXT,
     critic_notes TEXT,            -- JSON: {"approved": bool, "issues": [...]}

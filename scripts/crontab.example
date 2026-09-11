@@ -1,6 +1,15 @@
 # Cold email pipeline — installed via `crontab -e`.
-# Pipeline every 6h, send-approved hourly (only delivers what you've
-# clicked Approve on in the dashboard), replies checked daily at 08:00.
-0 */6 * * * /Users/harshsharma/Desktop/Work_Dir/cold_email/scripts/run_pipeline.sh
+#
+# nightly_agent.sh (3 AM) does the real work now: research, free Apollo
+# contact search, write, critique, and send up to 20 emails per night, all
+# done by a live Claude Code session (see NIGHTLY_RUNBOOK.md), fully
+# autonomous, no dashboard approval step. This replaces the old
+# run_pipeline.sh (qwen3:8b) + hourly send_approved.sh combo for that flow
+# — don't run both, they'd race over the same companies.
+#
+# send_approved.sh stays as a safety net for anything left sitting at
+# status='approved' that the nightly run didn't send for some reason.
+# reply_tracker.sh is unrelated and unaffected, keep as is.
+0 3 * * * /Users/harshsharma/Desktop/Work_Dir/cold_email/scripts/nightly_agent.sh
 0 * * * * /Users/harshsharma/Desktop/Work_Dir/cold_email/scripts/send_approved.sh
 0 8 * * * /Users/harshsharma/Desktop/Work_Dir/cold_email/scripts/reply_tracker.sh

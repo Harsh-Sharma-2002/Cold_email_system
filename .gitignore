@@ -6,3 +6,6 @@ credentials.json
 token.json
 .venv/
 venv/
+.DS_Store
+resume.txt
+resume.pdf
