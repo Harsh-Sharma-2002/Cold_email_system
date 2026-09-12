@@ -8,13 +8,32 @@ was previously miscounted as one. This checks the actual sender of the
 extra message(s): a genuine reply gets status='replied', a bounce that
 slipped past the original send-time check gets corrected to 'bounced'
 instead of being left incorrectly as 'sent' forever.
+
+Checks both the active sending account and the retired one (if its
+credentials/token backup still exists) — a row's thread lives in
+whichever mailbox actually sent it, and we still want reply/bounce
+visibility on everything already sent from the old account even though
+it's no longer sending new mail.
 """
+import os
 import time
 
 from googleapiclient.errors import HttpError
 
 from db.db import get_conn
 from sender.gmail_client import get_service
+
+OLD_CREDS_PATH = "credentials_old_flagged_account.json"
+OLD_TOKEN_PATH = "token_old_flagged_account.json"
+
+
+def _fetch_thread(service, thread_id):
+    try:
+        return service.users().threads().get(userId="me", id=thread_id).execute()
+    except HttpError as e:
+        if e.resp.status == 404:
+            return None
+        raise
 
 
 def check_replies():
@@ -28,22 +47,28 @@ def check_replies():
             return
 
         service = get_service()
-        skipped_other_mailbox = 0
+        old_service = None
+        old_service_tried = False
+        skipped = 0
+
         for row in rows:
-            try:
-                thread = service.users().threads().get(
-                    userId="me", id=row["gmail_thread_id"]
-                ).execute()
-            except HttpError as e:
-                if e.resp.status == 404:
-                    # Thread belongs to a different mailbox than the one
-                    # token.json currently authorizes (e.g. sent from an
-                    # account we've since switched away from) — can't be
-                    # checked from here, leave its status as-is.
-                    skipped_other_mailbox += 1
-                    time.sleep(0.5)
-                    continue
-                raise
+            thread = _fetch_thread(service, row["gmail_thread_id"])
+            active_service = service
+
+            if thread is None:
+                if not old_service_tried:
+                    old_service_tried = True
+                    if os.path.exists(OLD_TOKEN_PATH) and os.path.exists(OLD_CREDS_PATH):
+                        old_service = get_service(OLD_CREDS_PATH, OLD_TOKEN_PATH)
+                if old_service:
+                    thread = _fetch_thread(old_service, row["gmail_thread_id"])
+                    active_service = old_service
+
+            if thread is None:
+                skipped += 1
+                time.sleep(0.5)
+                continue
+
             messages = thread.get("messages", [])
             if len(messages) <= 1:
                 time.sleep(0.5)
@@ -51,7 +76,7 @@ def check_replies():
 
             new_status = None
             for m in messages[1:]:
-                msg = service.users().messages().get(
+                msg = active_service.users().messages().get(
                     userId="me", id=m["id"], format="metadata", metadataHeaders=["From"]
                 ).execute()
                 headers = {h["name"]: h["value"] for h in msg["payload"]["headers"]}
@@ -69,9 +94,10 @@ def check_replies():
                 )
                 conn.commit()
             time.sleep(0.5)  # stay under Gmail's per-minute API quota
-        if skipped_other_mailbox:
-            print(f"Skipped {skipped_other_mailbox} row(s) sent from a different, "
-                  f"currently-unauthorized mailbox — their status wasn't rechecked.")
+
+        if skipped:
+            print(f"Skipped {skipped} row(s) — thread not found in either the active or "
+                  f"retired mailbox (likely deleted or a stale ID).")
     finally:
         conn.close()
 
