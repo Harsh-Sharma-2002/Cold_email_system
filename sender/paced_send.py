@@ -30,6 +30,24 @@ DEFAULT_BATCH_SIZE = 5
 DEFAULT_MAX_PER_RUN = int(os.environ.get("MAX_PER_RUN", "50"))
 
 
+def _candidate_contact_ids(conn, limit):
+    """Contact ids behind the next `limit` bounced/approved rows, regardless
+    of verification status — used to scope verify_pending_contacts to just
+    this run instead of scanning every unverified contact in the DB."""
+    rows = conn.execute(
+        """
+        SELECT ct.id
+        FROM generated_emails ge
+        JOIN contacts ct ON ct.id = ge.contact_id
+        WHERE ge.status IN ('bounced', 'approved')
+        ORDER BY CASE ge.status WHEN 'bounced' THEN 0 ELSE 1 END, ge.id
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    return [r["id"] for r in rows]
+
+
 def _queued(conn, limit):
     return conn.execute(
         """
@@ -67,9 +85,6 @@ def run(interval_seconds, jitter_seconds, batch_size, max_per_run, ignore_window
     if ignore_window and not sending_window_open():
         print("Sending window check overridden by --ignore-window.")
 
-    print("Verifying any unchecked contact addresses (MX + SMTP probe)...")
-    verify_pending_contacts()
-
     conn = get_conn()
     remaining_today = daily_cap() - sent_today_count(conn)
     if remaining_today <= 0:
@@ -77,6 +92,13 @@ def run(interval_seconds, jitter_seconds, batch_size, max_per_run, ignore_window
         conn.close()
         return
     effective_max = min(max_per_run, remaining_today)
+
+    pool_size = max(effective_max * 3, 20)
+    candidate_ids = _candidate_contact_ids(conn, pool_size)
+    print(f"Verifying up to {len(candidate_ids)} contact address(es) behind the next "
+          f"{pool_size} queued rows (MX + SMTP probe, Apollo fallback on failure)...")
+    verify_pending_contacts(contact_ids=candidate_ids)
+
     queue = _queued(conn, effective_max)
     conn.close()
 
