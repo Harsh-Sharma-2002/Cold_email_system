@@ -59,10 +59,13 @@ def _bounced_since(service, subject, since_utc):
     return False
 
 
-def run(interval_seconds, jitter_seconds, batch_size, max_per_run):
-    if not sending_window_open():
-        print("Outside the weekday 8am-6pm sending window (America/Phoenix). Not sending.")
+def run(interval_seconds, jitter_seconds, batch_size, max_per_run, ignore_window=False):
+    if not ignore_window and not sending_window_open():
+        print("Outside the weekday 8am-6pm sending window (America/Phoenix). Not sending. "
+              "(pass --ignore-window to override)")
         return
+    if ignore_window and not sending_window_open():
+        print("Sending window check overridden by --ignore-window.")
 
     print("Verifying any unchecked contact addresses (MX + SMTP probe)...")
     verify_pending_contacts()
@@ -87,7 +90,7 @@ def run(interval_seconds, jitter_seconds, batch_size, max_per_run):
 
     sent_count = 0
     for batch_start in range(0, len(queue), batch_size):
-        if not sending_window_open():
+        if not ignore_window and not sending_window_open():
             print("Sending window closed mid-run (past 6pm or into the weekend). Stopping here.")
             break
         batch = queue[batch_start:batch_start + batch_size]
@@ -163,5 +166,7 @@ if __name__ == "__main__":
                          help="check for bounces every N sends (default 5)")
     parser.add_argument("--max", type=int, default=DEFAULT_MAX_PER_RUN,
                          help="max emails this run (default 50)")
+    parser.add_argument("--ignore-window", action="store_true",
+                         help="bypass the weekday 8am-6pm sending-window check")
     args = parser.parse_args()
-    run(args.interval, args.jitter, args.batch, args.max)
+    run(args.interval, args.jitter, args.batch, args.max, ignore_window=args.ignore_window)
