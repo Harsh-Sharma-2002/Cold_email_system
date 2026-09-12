@@ -185,3 +185,28 @@ this line.)
   that account again just for a status recheck; treat their last-known
   status (32 sent, 0 replied as of 2026-09-12) as frozen going forward
   unless the user asks to actively check that inbox.
+
+- 2026-09-12: **First real sends from the new account, off-hours by
+  explicit user override** (`--ignore-window`, Friday ~11:30pm MST — the
+  user chose this deliberately after I flagged it wasn't ideal). Ran
+  `paced_send --max 5 --ignore-window`. Picked up the 4 previously-
+  bounced rows first (ids 33-36: Chronosphere, Coralogix, Weights &
+  Biases, Anyscale — same content, just resent from the new mailbox) —
+  4 delivered, 0 bounced. Pinecone (id 37) is still `bounced`/queued for
+  next run.
+  **Found and fixed a real bug during this run**: `sent_today_count()`
+  matched only on local calendar date, so the old account's 32
+  historical sends (UTC timestamps landing on today's local date)
+  counted against the *new* account's fresh daily cap — throttled this
+  5-email run down to 4 before I caught it. Fixed by flooring the count
+  at `ramp_start_datetime`, an exact timestamp in `sending_state.json`
+  set once when the ramp for a given account begins; only sends after
+  that moment count. **If the account is ever switched again, this
+  timestamp needs to be set explicitly to the actual switch moment**
+  (delete `sending_state.json` before the first send of the new account
+  so `_load_state()` stamps a fresh floor — don't let it regenerate
+  after some sends from the new account have already happened, or it'll
+  wrongly exclude those too).
+  Current totals: 36 `sent`, 5 `bounced` (1 real — Pinecone; the rest
+  already resolved), 27 `approved`, 0 `replied`. Next window opens
+  Monday 8am America/Phoenix; 20/day cap in effect through 2026-09-18.
