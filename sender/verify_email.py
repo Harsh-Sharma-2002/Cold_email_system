@@ -9,6 +9,10 @@ contacts.email_verified semantics: 0 = not yet checked (default),
 1 = passed (deliverable or at least accepted), -1 = failed (bad address,
 skip it). An inconclusive probe (blocked/greylisted/timed out) leaves it
 at 0 rather than guessing — never treat "couldn't confirm" as a fail.
+
+When the SMTP probe fails an address outright (-1), that's a spent lead —
+falls back to one Apollo credit (verify_with_provider) to try to find a
+correct email for that same person before giving up on them entirely.
 """
 import smtplib
 import socket
@@ -16,6 +20,7 @@ import socket
 import dns.resolver
 
 from db.db import get_conn
+from pipeline.contacts import verify_with_provider
 
 PROBE_FROM = "verify-probe@gmail.com"
 
@@ -53,14 +58,30 @@ def verify_smtp(email, timeout=8):
     return None  # every MX host unreachable or blocked our probe
 
 
-def verify_pending_contacts(limit=200):
+def verify_pending_contacts(contact_ids=None, limit=200):
+    """
+    By default scans up to `limit` globally-pending contacts (slow — each
+    live SMTP probe can take several seconds, worse when a server blocks
+    the probe outright). Pass `contact_ids` to scope this to a specific
+    small set instead (e.g. only the contacts behind a send queue) so a
+    single paced_send run doesn't stall scanning contacts unrelated to it.
+    """
     conn = get_conn()
     try:
-        rows = conn.execute(
-            "SELECT id, email FROM contacts WHERE email_verified = 0 AND email IS NOT NULL LIMIT ?",
-            (limit,),
-        ).fetchall()
-        checked = passed = failed = 0
+        if contact_ids:
+            placeholders = ",".join("?" * len(contact_ids))
+            rows = conn.execute(
+                f"SELECT id, email FROM contacts "
+                f"WHERE email_verified = 0 AND email IS NOT NULL AND id IN ({placeholders})",
+                contact_ids,
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, email FROM contacts WHERE email_verified = 0 AND email IS NOT NULL LIMIT ?",
+                (limit,),
+            ).fetchall()
+
+        checked = passed = failed = recovered = 0
         for row in rows:
             result = verify_smtp(row["email"])
             if result is True:
@@ -69,9 +90,20 @@ def verify_pending_contacts(limit=200):
             elif result is False:
                 conn.execute("UPDATE contacts SET email_verified = -1 WHERE id = ?", (row["id"],))
                 failed += 1
+                conn.commit()
+                try:
+                    verify_with_provider(row["id"])  # spends 1 Apollo credit, may fix email+email_verified
+                    still_bad = conn.execute(
+                        "SELECT email_verified FROM contacts WHERE id = ?", (row["id"],)
+                    ).fetchone()["email_verified"]
+                    if still_bad == 1:
+                        recovered += 1
+                except Exception as e:
+                    print(f"  Apollo fallback failed for contact {row['id']}: {e!r}")
             checked += 1
             conn.commit()
-        print(f"Checked {checked}: {passed} passed, {failed} failed, "
+        print(f"Checked {checked}: {passed} passed, {failed} failed "
+              f"({recovered} recovered via Apollo), "
               f"{checked - passed - failed} inconclusive (left pending).")
     finally:
         conn.close()
