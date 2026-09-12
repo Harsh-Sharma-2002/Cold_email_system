@@ -12,7 +12,7 @@ is put into use, so the ramp restarts from day 1 for that account.
 """
 import json
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 STATE_PATH = os.path.join(os.path.dirname(__file__), "..", "sending_state.json")
@@ -26,13 +26,31 @@ WINDOW_START_HOUR = 8
 WINDOW_END_HOUR = 18
 
 
+def _sqlite_utc(dt):
+    """Formats a UTC datetime to match sqlite's CURRENT_TIMESTAMP ('YYYY-MM-DD HH:MM:SS')."""
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _save_state(state):
+    with open(STATE_PATH, "w") as f:
+        json.dump(state, f)
+
+
 def _load_state():
     if os.path.exists(STATE_PATH):
         with open(STATE_PATH) as f:
-            return json.load(f)
-    state = {"ramp_start_date": date.today().isoformat()}
-    with open(STATE_PATH, "w") as f:
-        json.dump(state, f)
+            state = json.load(f)
+    else:
+        state = {"ramp_start_date": date.today().isoformat()}
+
+    # ramp_start_datetime is the hard floor for sent_today_count: sends
+    # from before this moment (e.g. a previously-active account's
+    # historical sends that happen to fall on today's calendar date)
+    # must never count against this account's fresh daily cap.
+    if "ramp_start_datetime" not in state:
+        state["ramp_start_datetime"] = _sqlite_utc(datetime.now(timezone.utc))
+        _save_state(state)
+
     return state
 
 
@@ -51,8 +69,12 @@ def sending_window_open(now=None):
 
 
 def sent_today_count(conn):
+    state = _load_state()
     row = conn.execute(
         "SELECT COUNT(*) AS c FROM generated_emails "
-        "WHERE status IN ('sent', 'replied') AND date(sent_at, 'localtime') = date('now', 'localtime')"
+        "WHERE status IN ('sent', 'replied') "
+        "AND date(sent_at, 'localtime') = date('now', 'localtime') "
+        "AND sent_at > ?",
+        (state["ramp_start_datetime"],),
     ).fetchone()
     return row["c"]
