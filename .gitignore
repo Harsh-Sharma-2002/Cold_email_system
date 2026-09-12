@@ -3,7 +3,8 @@ __pycache__/
 .env
 leads.db
 credentials.json
-Credentials_2.json
+credentials_*.json
+Credentials_*.json
 token.json
 .venv/
 venv/
@@ -11,5 +12,4 @@ venv/
 resume.txt
 resume.pdf
 sending_state.json
-token_old_flagged_account.json
 token_*.json
