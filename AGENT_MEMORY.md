@@ -12,21 +12,36 @@ Do not delete history. If this file gets long, that's fine.
   key via `providers.enrichment.add_key()` when the current one runs out
   don't stop the whole run over one exhausted key, just note it here and
   move on to whatever doesn't need Apollo (or stop cleanly if nothing does).
-- Gmail rate limit status: tested twice with a single resend to Sierra
-  (generated_emails id 17), both still bounced with "you have reached a
-  limit for sending mail":
-    - 2026-09-11T02:19Z (~1-1.5h after the original burst): still blocked
-    - 2026-09-11T04:23Z (~3-3.5h after the original burst): still blocked
-  Don't assume it's clear without testing. Before any future batch, send
-  ONE email first, wait ~10s, search `from:mailer-daemon` for a fresh
-  bounce with that exact subject, and only proceed with the rest of the
-  batch if that one actually cleared. Researched guidance says blocks
-  last 1-24h; given it's still blocked at 3.5h, expect it may take most
-  of a full 24h window from the original burst (~2026-09-11 01:00-02:00Z)
-  before this account can send again. If a future test around or after
-  2026-09-12 01:00-02:00Z still bounces, that's past the researched
-  1-24h range and worth flagging to the user as possibly a longer or
-  different kind of restriction, not just normal rate-limit cooldown.
+- **Gmail account status: CONFIRMED past normal rate-limit range, likely a
+  spam/abuse flag rather than a routine quota reset. Do not keep silently
+  retrying — this needs the user to actually check their account.**
+  Tested four times with a single resend to Sierra (generated_emails id 17):
+    - 2026-09-11T02:19Z (~1-1.5h after the burst): "reached a limit" bounce
+    - 2026-09-11T04:23Z (~3-3.5h after): "reached a limit" bounce
+    - 2026-09-11T21:41Z (~20h after): "reached a limit" bounce
+    - 2026-09-12T01:45Z (~24h after, past the researched 1-24h window):
+      **bounced with "Message blocked" / "Message rejected" instead** —
+      a different, more serious bounce type than the previous three (this
+      is the same category as the 9 outright-blocked messages from the
+      original burst, not the simple rate-limit message). A normal
+      rate-limit block should have cleared by 24h; this one changed
+      character instead of clearing, which points to spam/abuse flagging
+      on the account, not just a quota window.
+  Do NOT keep auto-retrying this on a timer expecting it to self-resolve.
+  Tell the user directly: check https://myaccount.google.com/security and
+  the Gmail inbox itself for any suspicious-activity notice from Google,
+  since that's the more likely explanation now. Only resume sending once
+  the user confirms the account looks normal, and even then start with a
+  single test send, not a batch.
+  **UPDATE 2026-09-12T03:23Z: a 5th test send to the same Sierra contact
+  CLEARED — no bounce after 2+ minutes of waiting (every prior bounce in
+  this saga arrived within 10-20s, so that's a reliable signal). Confirmed
+  delivered, real Gmail message id 1a093a43194f2030, generated_emails id
+  17 status='sent'. The account appears to be working again as of this
+  timestamp. Still resume the rest of the 24 remaining bounced emails
+  WITH PACING (sender/paced_send.py, 5 min apart, stops itself after 2
+  consecutive bounces) rather than assuming it's fully healed and bursting
+  again — that's exactly the mistake that caused this whole saga.**
 - **CRITICAL — real sending limit for this account is MUCH lower than the
   20/night originally agreed, and sends must be paced, not fired in a
   burst.** Sending ~40 emails back to back from a personal Gmail account
@@ -95,3 +110,35 @@ headless `claude -p --dangerously-skip-permissions` invocation under
 cron's stripped environment yet, so treat the first real run as
 unverified until AGENT_MEMORY.md shows a genuine automated entry below
 this line.)
+
+- 2026-09-12: **Found and fixed a false-positive bug in `reply_tracker.py`.**
+  It marked a row `status='replied'` whenever `len(thread['messages']) > 1`,
+  without checking who sent the extra message. A delayed bounce
+  notification (from `mailer-daemon@googlemail.com`) lands in the same
+  Gmail thread as the original send, so it satisfied that check too. This
+  had falsely marked Chronosphere (id 33), Coralogix (id 34), and Weights
+  & Biases (id 35) as `replied`, and Anyscale (id 36) and Pinecone (id 37)
+  as `sent`, when a precise per-thread audit (checking the `From` header
+  of every message past the first) showed all 5 actually bounced with
+  "Message blocked" / "Message rejected" from Google — same block type as
+  the original burst, not a new address problem. **There were 0 real
+  replies, not 3.** Corrected all 5 rows back to `status='bounced'` in the
+  DB. Fixed `reply_tracker.py` to check the `From` header and only count a
+  message as a reply if it's not from `mailer-daemon`; if the only extra
+  message(s) in a thread are bounces, it now sets `status='bounced'`
+  instead of leaving the row stuck at `sent`.
+  Also fixed the same blind spot in `paced_send.py`: its in-run bounce
+  check only waited 25s after each batch of 5, which is too short — these
+  5 bounces arrived later than that window and were missed at send time.
+  Increased the wait to 60s as a faster circuit-breaker, but more
+  importantly, `paced_send.run()` now calls `reply_tracker.check_replies()`
+  as an authoritative final sweep after the whole run finishes, since that
+  checks the actual thread content rather than a time-boxed search and
+  will catch bounces that arrive after the in-run window regardless of
+  delay.
+  **Lesson for future runs: never trust a `sent`/`replied` count in this DB
+  without having run `reply_tracker.check_replies()` (or the SessionStart
+  hook, which calls it) first — the paced sender's own bounce check is
+  only a fast circuit-breaker, not the source of truth.** Corrected totals
+  as of this entry: 32 `sent` (verified via the fixed tracker), 9
+  `bounced`, 27 `approved`/queued, 0 `replied`.
