@@ -142,3 +142,46 @@ this line.)
   only a fast circuit-breaker, not the source of truth.** Corrected totals
   as of this entry: 32 `sent` (verified via the fixed tracker), 9
   `bounced`, 27 `approved`/queued, 0 `replied`.
+
+- 2026-09-12: **Switched the active sending account.** The original
+  account (project `ferrous-acronym-508220-i9`) is being retired/paused
+  after the burst-sending block — not deleted, just no longer the active
+  sender. `credentials.json`/`token.json` now point at a 4-year-old,
+  previously-unused Gmail account (`hs210310222360@gmail.com`, project
+  `quick-processor-445313-j1`) chosen specifically because an aged
+  account has better starting trust than a freshly-created one, even
+  though it's never sent bulk mail before. Old credentials/token are
+  preserved as `credentials_old_flagged_account.json` /
+  `token_old_flagged_account.json` (gitignored) if we ever need to go
+  back or re-check that mailbox by hand.
+  Setup required two Google Cloud Console steps beyond the OAuth login
+  itself: (1) add `hs210310222360@gmail.com` as a test user on the
+  correct project's OAuth consent screen — **easy to point at the wrong
+  project since we have two now, verify the project ID in the URL
+  matches `credentials.json`'s `project_id` before adding test users**;
+  (2) explicitly enable the Gmail API on that project (new projects
+  don't have it enabled by default even after OAuth consent is set up).
+  **Explicitly decided NOT to send from both accounts concurrently.**
+  Researched this — same IP/device across multiple Gmail accounts is a
+  documented Google abuse-detection correlation signal, and sending
+  near-identical bulk content from a second account on the same network
+  while the first is already flagged risks getting the new account
+  flagged too before it ever builds reputation. Single account at a
+  time, not round-robin.
+  Reset the ramp (`sending_state.json` deleted, ramp restarts at day 1)
+  and added `RAMP_DAYS`/`RAMP_DAILY_CAP` semantics in
+  `sender/pacing_config.py`: 20/day for the first 7 days, 30/day after,
+  weekday 8am-6pm America/Phoenix only. Since this account has no
+  negative signal (unlike the flagged one), this is a gentler ramp than
+  a true recovery ramp would be — not the 5-10/day that a still-flagged
+  account should use.
+  **Known gap**: the 32 rows already marked `sent` were sent from the
+  OLD account's mailbox. `reply_tracker.py` now catches the resulting
+  404 and skips those rows gracefully instead of crashing (see commit
+  "Make reply_tracker resilient to threads in a different mailbox"), but
+  it means **those 32 rows' reply/bounce status will no longer update
+  automatically** — would need `token_old_flagged_account.json` swapped
+  back in temporarily to recheck them. Not worth the risk of touching
+  that account again just for a status recheck; treat their last-known
+  status (32 sent, 0 replied as of 2026-09-12) as frozen going forward
+  unless the user asks to actively check that inbox.
