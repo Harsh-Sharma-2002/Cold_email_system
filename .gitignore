@@ -3,6 +3,7 @@ __pycache__/
 .env
 leads.db
 credentials.json
+Credentials_2.json
 token.json
 .venv/
 venv/
