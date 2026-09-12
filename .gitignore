@@ -9,3 +9,6 @@ venv/
 .DS_Store
 resume.txt
 resume.pdf
+sending_state.json
+token_old_flagged_account.json
+token_*.json
