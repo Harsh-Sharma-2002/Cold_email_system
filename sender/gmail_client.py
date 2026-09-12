@@ -32,18 +32,24 @@ CREDS_PATH = "credentials.json"
 RESUME_PATH = os.environ.get("RESUME_ATTACHMENT_PATH", "resume.pdf")
 
 
-def get_service():
+def get_service(creds_path=CREDS_PATH, token_path=TOKEN_PATH):
+    """
+    Defaults to the active sending account. Pass a different
+    (creds_path, token_path) pair to read another mailbox — e.g. a
+    retired account whose old sent threads we still want to poll for
+    replies, without touching the token used for actual sending.
+    """
     creds = None
-    if os.path.exists(TOKEN_PATH):
-        creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
+    if os.path.exists(token_path):
+        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(CREDS_PATH, SCOPES)
+            flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
             creds = flow.run_local_server(port=0)
-        with open(TOKEN_PATH, "w") as f:
+        with open(token_path, "w") as f:
             f.write(creds.to_json())
 
     return build("gmail", "v1", credentials=creds)
