@@ -19,7 +19,19 @@ from reportlab.platypus import (
 OUTPUT_PATH = os.path.join(os.path.dirname(__file__), "..", "resume_new.pdf")
 
 NAME = "Harsh Sharma"
-CONTACT = "hsharm68@asu.edu | +1 623 285 5824 | LinkedIn | GitHub"
+LINKEDIN_URL = "https://www.linkedin.com/in/harsh-sharma-ab303022b/"
+GITHUB_URL = "https://github.com/Harsh-Sharma-2002"
+LINK_COLOR = "#1155cc"
+
+
+def _link(url, text):
+    return f'<link href="{url}"><font color="{LINK_COLOR}"><u>{text}</u></font></link>'
+
+
+CONTACT = (
+    f"hsharm68@asu.edu | +1 623 285 5824 | "
+    f"{_link(LINKEDIN_URL, 'LinkedIn')} | {_link(GITHUB_URL, 'GitHub')}"
+)
 
 SUMMARY = (
     "Computer Science M.S. student focused on building agentic AI systems, observability infrastructure, and "
@@ -108,6 +120,7 @@ EXPERIENCE = [
 PROJECTS = [
     {
         "name": "Agent Harness – Modular Multi-Agent Orchestration System",
+        "url": "https://github.com/Harsh-Sharma-2002/Agentic-harnesss",
         "bullets": [
             "Built a modular multi-agent orchestration harness with LangGraph, FastAPI, and Streamlit, featuring "
             "a Base Orchestrator that routes requests to specialized agents through isolated private execution "
@@ -121,6 +134,7 @@ PROJECTS = [
     },
     {
         "name": "RepoScope – Repository-Aware Code Analysis and Review System",
+        "url": "https://github.com/Harsh-Sharma-2002/Reposcope",
         "bullets": [
             "Built a repository-aware AI backend that indexes source code into a persistent vector database and "
             "retrieves relevant cross-file context for LLM-based code review, using semantic chunking, bounded "
@@ -186,7 +200,8 @@ def build():
 
     section_header("Selected Projects")
     for p in PROJECTS:
-        story.append(Paragraph(f"<b>{p['name']}</b>", styles["entry_title"]))
+        title = _link(p["url"], f"<b>{p['name']}</b>") if p.get("url") else f"<b>{p['name']}</b>"
+        story.append(Paragraph(title, styles["entry_title"]))
         bullets(p["bullets"])
         story.append(Spacer(1, 2))
 
