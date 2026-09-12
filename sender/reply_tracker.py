@@ -11,6 +11,8 @@ instead of being left incorrectly as 'sent' forever.
 """
 import time
 
+from googleapiclient.errors import HttpError
+
 from db.db import get_conn
 from sender.gmail_client import get_service
 
@@ -26,10 +28,22 @@ def check_replies():
             return
 
         service = get_service()
+        skipped_other_mailbox = 0
         for row in rows:
-            thread = service.users().threads().get(
-                userId="me", id=row["gmail_thread_id"]
-            ).execute()
+            try:
+                thread = service.users().threads().get(
+                    userId="me", id=row["gmail_thread_id"]
+                ).execute()
+            except HttpError as e:
+                if e.resp.status == 404:
+                    # Thread belongs to a different mailbox than the one
+                    # token.json currently authorizes (e.g. sent from an
+                    # account we've since switched away from) — can't be
+                    # checked from here, leave its status as-is.
+                    skipped_other_mailbox += 1
+                    time.sleep(0.5)
+                    continue
+                raise
             messages = thread.get("messages", [])
             if len(messages) <= 1:
                 time.sleep(0.5)
@@ -55,6 +69,9 @@ def check_replies():
                 )
                 conn.commit()
             time.sleep(0.5)  # stay under Gmail's per-minute API quota
+        if skipped_other_mailbox:
+            print(f"Skipped {skipped_other_mailbox} row(s) sent from a different, "
+                  f"currently-unauthorized mailbox — their status wasn't rechecked.")
     finally:
         conn.close()
 
