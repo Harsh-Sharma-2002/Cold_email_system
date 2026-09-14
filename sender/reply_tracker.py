@@ -3,11 +3,16 @@ Polls sent threads for replies. Run periodically — cron, or by hand.
 Uses the readonly scope already requested in gmail_client.py.
 
 A thread with more than one message isn't necessarily a reply — a delayed
-bounce notification (from mailer-daemon) also lands in the same thread and
-was previously miscounted as one. This checks the actual sender of the
-extra message(s): a genuine reply gets status='replied', a bounce that
-slipped past the original send-time check gets corrected to 'bounced'
-instead of being left incorrectly as 'sent' forever.
+bounce notification also lands in the same thread and was previously
+miscounted as one. Checking only for "mailer-daemon" in the From header
+(the first fix) still missed bounces from a recipient's own mail system
+(e.g. systems-postmaster@world.deshaw.com), which don't contain that
+string at all. The reliable signal is the MIME Content-Type: a bounce is
+a standards-based Delivery Status Notification
+(RFC 3464, `multipart/report; report-type=delivery-status`), regardless
+of what the sending address happens to be called. That's the primary
+check now; the From-header substring check is kept as a fallback for any
+bounce that doesn't set the DSN content type correctly.
 
 Checks both the active sending account and the retired one (if its
 credentials/token backup still exists) — a row's thread lives in
@@ -77,11 +82,18 @@ def check_replies():
             new_status = None
             for m in messages[1:]:
                 msg = active_service.users().messages().get(
-                    userId="me", id=m["id"], format="metadata", metadataHeaders=["From"]
+                    userId="me", id=m["id"], format="metadata",
+                    metadataHeaders=["From", "Content-Type"],
                 ).execute()
                 headers = {h["name"]: h["value"] for h in msg["payload"]["headers"]}
                 sender = headers.get("From", "").lower()
-                if "mailer-daemon" in sender:
+                content_type = headers.get("Content-Type", "").lower()
+                is_bounce = (
+                    "report-type=delivery-status" in content_type
+                    or "mailer-daemon" in sender
+                    or "postmaster" in sender
+                )
+                if is_bounce:
                     new_status = new_status or "bounced"
                 else:
                     new_status = "replied"
