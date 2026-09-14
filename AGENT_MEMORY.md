@@ -210,3 +210,25 @@ this line.)
   Current totals: 36 `sent`, 5 `bounced` (1 real — Pinecone; the rest
   already resolved), 27 `approved`, 0 `replied`. Next window opens
   Monday 8am America/Phoenix; 20/day cap in effect through 2026-09-18.
+
+- 2026-09-14: **Second round of the same bug class.** A paced_send run
+  marked D.E. Shaw (id 55) as `replied` — the first real "reply" this
+  campaign had ever gotten. It wasn't real: it was a bounce from D.E.
+  Shaw's own mail system (`systems-postmaster@world.deshaw.com`,
+  "Recipient not found"), which the `mailer-daemon`-substring check from
+  the last fix simply didn't catch, since that sender address doesn't
+  contain "mailer-daemon" at all. Third-party corporate mail systems use
+  their own postmaster addresses for bounces, not Google's.
+  Fixed properly this time using the actual standard instead of guessing
+  at sender-address substrings: a bounce is a MIME
+  `multipart/report; report-type=delivery-status` message per RFC 3464,
+  regardless of what the From address is called. `reply_tracker.py` now
+  checks Content-Type first, with the mailer-daemon/postmaster substring
+  check kept only as a fallback. Corrected id 55 back to `bounced` and
+  re-ran the full sweep to confirm nothing else slipped through.
+  **Still 0 genuine replies as of this entry.** Don't trust a `replied`
+  count from this system without checking that this fix is actually
+  deployed — the pattern here (checking a proxy signal instead of the
+  actual standard/mechanism) is exactly what caused both bugs, so any
+  future bounce-detection tweak should default to checking the real MIME
+  type, not pattern-matching a sender address.
