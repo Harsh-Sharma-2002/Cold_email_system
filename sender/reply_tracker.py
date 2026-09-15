@@ -45,7 +45,7 @@ def check_replies():
     conn = get_conn()
     try:
         rows = conn.execute(
-            "SELECT id, gmail_thread_id FROM generated_emails "
+            "SELECT id, contact_id, gmail_thread_id FROM generated_emails "
             "WHERE status = 'sent' AND gmail_thread_id IS NOT NULL"
         ).fetchall()
         if not rows:
@@ -104,6 +104,19 @@ def check_replies():
                     "UPDATE generated_emails SET status = ? WHERE id = ?",
                     (new_status, row["id"]),
                 )
+                if new_status == "bounced":
+                    # A contact that already passed the pre-send SMTP probe
+                    # (email_verified=1) never gets re-probed by
+                    # verify_pending_contacts (it only rechecks
+                    # email_verified=0), so a hard bounce here is the only
+                    # signal that address is actually dead. Without this,
+                    # the same dead address gets resent and re-bounces on
+                    # every future paced_send run indefinitely, and each
+                    # repeat trips the batch-of-5 circuit breaker.
+                    conn.execute(
+                        "UPDATE contacts SET email_verified = -1 WHERE id = ?",
+                        (row["contact_id"],),
+                    )
                 conn.commit()
             time.sleep(0.5)  # stay under Gmail's per-minute API quota
 

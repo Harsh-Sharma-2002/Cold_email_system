@@ -232,3 +232,48 @@ this line.)
   actual standard/mechanism) is exactly what caused both bugs, so any
   future bounce-detection tweak should default to checking the real MIME
   type, not pattern-matching a sender address.
+
+- 2026-09-15: **Interactive run (not the nightly cron), 13 new companies
+  processed by hand following the runbook** (research/contacts/write/
+  critique done directly, not via pipeline/generate.py's LLM path):
+  Galileo, CrewAI, Modal Labs, LlamaIndex, Amazon, Microsoft, Google,
+  Meta, Apple, Netflix, Oracle, Intel, Qualcomm. Plus the 2 prior
+  `bounced` rows (Jane Street, D.E. Shaw) picked up for resend by
+  paced_send as usual. **Final: 12 delivered, 3 dead**.
+  Jane Street (jk@janestreet.com) and D.E. Shaw (sanketh@deshaw.com)
+  hard-bounced again, same addresses as before. Root cause found: once
+  a contact passes the SMTP probe (`email_verified=1`), it's never
+  re-checked, so a confirmed hard bounce doesn't stop it from being
+  resent and re-bouncing on every future run. Fixed in
+  `reply_tracker.py`: a confirmed bounce now also sets that contact's
+  `email_verified = -1`, permanently excluding it from `paced_send`'s
+  queue. Both contacts marked accordingly.
+  Galileo's first send bounced too (musthaq.ahamed@galileo.ai, a
+  pattern-guessed address since Apollo had no email on file for that
+  contact). Found a real contact (Vikram, co-founder/CEO,
+  vikram@galileo.ai) via a broader Apollo title search
+  (founder/cto/head of engineering, not just recruiter titles) and
+  resent successfully.
+  Intel could not be reached: 3 different Apollo contacts tried
+  (gkrishnan@intc.com — wrong domain, Apollo's own data error;
+  jayanth.natarajan@intel.com — real domain, still hard-bounced;
+  maki.sugimoto@intel.com — caught by the SMTP pre-check before even
+  sending, also bad). All 3 marked `email_verified=-1`. Intel's
+  `generated_emails` row left at `status='bounced'` — genuinely
+  exhausted the reasonable candidate pool per the runbook's "don't try
+  more than 2-3 deep" guidance, not resolved. Worth trying again later
+  if Apollo's data for Intel contacts refreshes.
+  **Also found**: `paced_send`'s own trailing "final authoritative
+  sweep" (`check_replies()`) crashed with a Gmail API 403 rate-limit
+  error ("Total Query Cost" quota) partway through, because
+  `check_replies()` has no date filter and rescans every historical
+  `status='sent'` row, not just the current run's rows, every single
+  time it's called. The actual sends all completed fine before the
+  crash (paced_send's per-batch-of-5 bounce checks are a live Gmail
+  search and didn't catch these bounces in time, likely delivery-status
+  arrival lag vs. the 60s checkpoint window) — only the trailing
+  verification step failed. A manual `check_replies()` call afterward
+  succeeded once enough time had passed for the per-minute quota to
+  reset. Not fixed yet: if this keeps happening, `check_replies()`
+  should probably scope its query to recent `sent_at` rather than the
+  full history.
