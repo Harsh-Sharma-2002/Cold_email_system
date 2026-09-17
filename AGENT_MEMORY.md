@@ -8,9 +8,16 @@ Do not delete history. If this file gets long, that's fine.
 
 ## Standing notes (update in place, not as dated entries)
 
-- Apollo key status: fine as of 2026-09-11. User said they'll swap in a new
-  key via `providers.enrichment.add_key()` when the current one runs out
-  don't stop the whole run over one exhausted key, just note it here and
+- **Apollo key status: EXHAUSTED as of 2026-09-17 ~16:55 (`api_keys` row 1,
+  provider='apollo', status='exhausted').** The single on-file key ran dry
+  mid-run today, first surfacing as repeated 422s from `/people/match`
+  (not one of the auto-rotate codes in `providers/enrichment.py`, so it
+  kept retrying the same dead key) before finally hitting the real
+  "No active apollo API keys left" error. Don't burn time retrying 422s
+  from this endpoint as if they're a data problem per-contact; check
+  `api_keys` status first. Needs a new key via
+  `providers.enrichment.add_key()` before any more contact verification
+  can happen. Don't stop the whole run over it, just note it here and
   move on to whatever doesn't need Apollo (or stop cleanly if nothing does).
 - **Gmail account status: CONFIRMED past normal rate-limit range, likely a
   spam/abuse flag rather than a routine quota reset. Do not keep silently
@@ -277,3 +284,51 @@ this line.)
   reset. Not fixed yet: if this keeps happening, `check_replies()`
   should probably scope its query to recent `sent_at` rather than the
   full history.
+
+- 2026-09-17: **Interactive run (fork, not nightly cron), targeting 30
+  new companies since the pool had zero backlog (all 112 prior companies
+  were already `email_generated`).** Inserted 30 candidates
+  (agentic-AI-infra and dev-infra companies: CoreWeave, Groq, Cerebras,
+  SambaNova, Weaviate, Qdrant, Chroma, Baseten, Hugging Face,
+  Sourcegraph, Netlify, Fly.io, Supabase, PlanetScale, Neon, Clerk,
+  WorkOS, Mercury, Vanta, Drata, Robinhood, Coinbase, Affirm, Zoom,
+  Asana, Monday.com, Canva, Airtable, Webflow, Shopify), researched all
+  30, ran `find_contacts` on all 30.
+  **6 had zero Apollo candidates even after a broadened title search**
+  (talent/recruiter/people/founder/head of engineering/engineering
+  manager/chief of staff/hr): Neon, Webflow, PlanetScale, Weaviate,
+  Fly.io, Clerk. Retried the broadened search and recovered contacts for
+  4 of those (PlanetScale, Weaviate, Fly.io, Clerk); Neon and Webflow
+  still came back empty, so they were dropped and replaced with Vellum
+  AI and Humanloop, which *also* came back with zero contacts. Replaced
+  again with Deel and Toast, which worked (8 candidates each). Net: 28
+  of the original 30 plus these 2 replacements, all with contacts found.
+  **Apollo key exhausted partway through email verification** (see
+  standing note above) — got through 23 of the 30 before hitting first
+  repeated 422s, then the hard "no active keys" error. The remaining 7
+  (Asana, Monday.com, Canva, Airtable, Shopify, Deel, Toast) never got a
+  verified email and are sitting at `status='contact_found'` with
+  unverified contacts, ready to resume the moment a new key is added.
+  Wrote all 23 emails **by hand** (not via `pipeline/generate.py`'s LLM
+  path), each grounded in real evidence pulled from that company's
+  `evidence` rows plus `resume.txt`, following the interactive runbook.
+  4 of the 23 have a contact whose revealed email domain doesn't
+  exactly match `companies.domain` (Cerebras: cerebras.net vs cerebras.ai;
+  Qdrant: qdrant.com vs qdrant.tech; Supabase: supabase.io vs
+  supabase.com; Clerk: clerk.dev vs clerk.com) — tried every other
+  candidate at each of those 4 companies first and they all independently
+  resolved to the same alternate domain, which reads as a real secondary
+  corporate domain rather than an Apollo data error, but flagging here in
+  case any of the 4 bounces later and this reasoning turns out wrong.
+  Sent via the daily-cap-override pattern (ramp was on day 6/7, cap=20,
+  overridden to cover this run; `sending_state.json` untouched, so
+  today's the last day the override is needed, tomorrow's cap is 30
+  automatically).
+  **Final: 21 delivered, 1 bounced, 1 replied.** Chroma's contact
+  (chroma@trychroma.com) hard-bounced; `email_verified` was
+  auto-set to -1 by the existing bounce-handling fix, so it won't be
+  resent. Groq's contact (mrogers@groq.com) shows `status='replied'` in
+  `generated_emails`, the first one this campaign has seen since the
+  reply-detection MIME-type fix went in on 2026-09-14, worth the user
+  actually checking that inbox to confirm it's a genuine reply and not
+  another false positive.
