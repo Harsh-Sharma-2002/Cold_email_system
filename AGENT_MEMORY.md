@@ -398,9 +398,66 @@ this line.)
   blog post, a funding announcement, a product tagline), not a generic
   template; checked for the no-em-dash/no-double-hyphen rule and the
   ~150-word cap programmatically before inserting (111-129 words each).
-  **Nothing was sent.** All 10 are sitting in the dashboard
-  (`streamlit run dashboard/app.py`) waiting on the user's review before
-  anyone sends anything, per their explicit choice this run. Next step
-  once reviewed: `python -m sender.send_approved` (still capped, still
-  needs pacing per the standing notes above, still on the
-  `hs210310222360@gmail.com` account and its current ramp).
+  Nothing sent yet this entry -- user reviewed and said to send; see the
+  next entry for the actual send results.
+
+- 2026-09-18 (same day, follow-up): **User said to send. Ran
+  `sender.paced_send` on all 10 approved rows. Final: 10/10 delivered,
+  0 permanently bounced**, after two rounds:
+  - **Round 1** (7 queued -- 3 filtered pre-send): Confident AI, Arthur
+    AI, SigNoz, Composio, H Company, and Cribl sent clean. Fiddler AI,
+    Browserbase, and Daytona's pattern-guessed addresses failed the
+    pre-send SMTP probe outright (`email_verified` auto-set to -1),
+    so `paced_send` correctly never attempted them. Firecrawl *did*
+    send in this round but came back bounced on the delayed authoritative
+    sweep (not caught by the in-run batch checkpoint -- consistent with
+    this project's established pattern of bounces arriving after the
+    fast checkpoint window).
+  - **Found and fixed the 3 pre-send failures** via free SMTP probes
+    against alternate patterns (`sender.verify_email.verify_smtp`, no
+    Apollo needed): `krishna@fiddler.ai` (same person, first-name-only
+    pattern) and `ivan@daytona.io` (same, first-name-only) both passed
+    cleanly. Browserbase's Adam McQuilkin had no working pattern at all
+    (`adam@`, `amcquilkin@`, `a.mcquilkin@`, `adammcquilkin@`, `adam.m@`
+    all rejected outright) -- switched the contact to founder/CEO **Paul
+    Klein IV** (`paul.klein@browserbase.com`, passed) instead and updated
+    the email's greeting to match. Verified all three domains reject an
+    obviously-fake address first, confirming they're not catch-all and
+    the probe result is meaningful.
+  - **Firecrawl's bounce was different: `firecrawl.dev` is a catch-all
+    domain.** Every pattern tried, including `hello@` and `support@`,
+    returned a pass from the SMTP probe, which is exactly why the
+    original guess slipped through pre-send verification and then hard
+    bounced anyway -- the probe cannot distinguish a real mailbox from a
+    nonexistent one on this domain. No amount of pattern-guessing would
+    have caught this in advance. Routed through `hello@firecrawl.dev`
+    (still greeted "Hi Eric" in the body, since he's still the intended
+    reader) as the lowest-risk option, logged at `confidence=0.3` in the
+    `contacts` table to flag it as unconfirmed; it delivered clean in
+    round 2, but this route is inherently less trustworthy than a real
+    verified personal address and worth remembering if it ever bounces
+    again.
+  - **Round 2** (4 queued, all fixed): Fiddler AI, Browserbase, Firecrawl,
+    Daytona all sent and confirmed delivered on the authoritative sweep.
+  - **Found and fixed a real crash bug in `reply_tracker.check_replies()`
+    along the way**: the old/retired account's OAuth token has now fully
+    expired (`RefreshError: invalid_grant`), not just 404ing on individual
+    threads like the previously-handled case. Since the fallback path to
+    the old mailbox triggers on *any* row whose thread isn't found in the
+    active account (which includes all 32 historically-sent old-account
+    rows, every single run), this crashed the entire trailing sweep
+    unconditionally -- round 1's run failed with exit code 1 here, after
+    all 7 sends had already gone out fine, which is what first surfaced
+    Firecrawl's bounce needing a second look. Fixed by wrapping the old
+    `get_service()` call in a try/except so an expired/revoked old token
+    is treated the same as "old service unavailable" (skip those rows)
+    instead of crashing. Confirmed fixed: round 2's run completed exit
+    code 0, correctly printing "Skipped 32 row(s)" instead of crashing.
+    **The 32 historical old-account rows remain frozen/unrecheckable
+    going forward**, as already noted in the 2026-09-12 entry above --
+    this fix just stops that gap from taking down every future run's
+    bounce-checking for the *current* account too.
+  Final tally for this batch: companies 151, 152, 154-161 (10 total,
+  skipping 149/147/148/150/153 which were caught dead beforehand) all
+  at `generated_emails.status='sent'`, all confirmed via the
+  authoritative `check_replies()` sweep, not just a message-id response.

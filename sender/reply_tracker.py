@@ -64,7 +64,17 @@ def check_replies():
                 if not old_service_tried:
                     old_service_tried = True
                     if os.path.exists(OLD_TOKEN_PATH) and os.path.exists(OLD_CREDS_PATH):
-                        old_service = get_service(OLD_CREDS_PATH, OLD_TOKEN_PATH)
+                        try:
+                            old_service = get_service(OLD_CREDS_PATH, OLD_TOKEN_PATH)
+                        except Exception as e:
+                            # The old account's OAuth token can expire/be revoked outright
+                            # (not just 404 on individual threads, which _fetch_thread
+                            # already handles) -- treat that the same as "no old service
+                            # available" rather than crashing the whole sweep over it.
+                            print(f"Retired account's token is no longer usable "
+                                  f"({type(e).__name__}: {e}); skipping reply/bounce "
+                                  f"checks against it for the rest of this run.")
+                            old_service = None
                 if old_service:
                     thread = _fetch_thread(old_service, row["gmail_thread_id"])
                     active_service = old_service
