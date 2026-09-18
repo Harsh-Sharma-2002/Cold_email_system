@@ -352,3 +352,55 @@ this line.)
   (Tavily-only) can proceed for these 15 regardless, but
   `find_contacts`/`verify_with_provider` will not work until a new key
   is added via `providers.enrichment.add_key()`.
+
+- 2026-09-18: **Ran today's pipeline on the 15-company startup batch,
+  interactively, generate+critique only (user explicitly chose not to
+  auto-send this run; emails sit at `status='approved'` for dashboard
+  review).**
+  **Apollo: user added a second key (id 2), but it failed immediately,
+  never even reaching `last_used`.** Root cause confirmed via a raw
+  request outside the enrichment wrapper: Apollo returns 403
+  `API_INACCESSIBLE` on `/mixed_people/api_search` for this key, with the
+  explicit message "not included in your Free plan and is not
+  accessible, even with a master key. All paid plans include full API
+  access." **This is a plan restriction, not a credits/key problem** (a
+  fresh key from a paid account would presumably still work fine, but a
+  free-tier key structurally cannot call this endpoint no matter how many
+  are added). Both stored keys are now `status='exhausted'` for this
+  reason. Worked around it entirely by sourcing contacts via WebSearch
+  (real named founders/execs/recruiters, not invented) and
+  `pipeline.contacts.add_contact`'s pattern-guessed email instead of
+  Apollo's verified reveal, same fallback already proven for Galileo
+  earlier in this project. **Bounce risk is real here and higher than
+  Apollo-verified** since these emails were never SMTP-confirmed, unlike
+  the Apollo path.
+  **Caught 5 of the original 15 companies as dead/acquired/absorbed
+  before writing anything**, purely from reading the `research_company`
+  evidence directly rather than trusting the founder-search results that
+  found their contacts: Traceloop (acquired by ServiceNow), Helicone
+  ("Helicone Joins Mintlify" banner on their own site), Langfuse
+  (acquired by ClickHouse Inc, per an Orrick law firm release), WhyLabs
+  (their own site, every page: "WhyLabs, Inc. is discontinuing
+  operations"), and Portkey (acquired by Palo Alto Networks, closed
+  2026-06-01, caught before a contact was even added). All 5 reset to
+  `status='researched'` with their (now-stale) contact rows deleted, so
+  a future run doesn't pick them up. This is exactly the failure mode
+  the "read the evidence yourself" rule in this runbook exists to catch;
+  a shallower name-only search would have sent outreach to a company
+  that's shutting down.
+  Also caught mid-search: H Company's founder Charles Kantor stepped
+  down as CEO in June 2025 (Sifted coverage), replaced by Gautier Cloix
+  (ex-Palantir France). Addressed that email to Cloix, not Kantor.
+  **Wrote, self-critiqued, and inserted 10 emails at `status='approved'`**
+  (ids 136-145): Confident AI, Fiddler AI, Arthur AI, SigNoz, Composio,
+  Browserbase, Firecrawl, Daytona, H Company, Cribl. Each grounded in a
+  specific fact pulled from that company's actual `evidence` rows (a
+  blog post, a funding announcement, a product tagline), not a generic
+  template; checked for the no-em-dash/no-double-hyphen rule and the
+  ~150-word cap programmatically before inserting (111-129 words each).
+  **Nothing was sent.** All 10 are sitting in the dashboard
+  (`streamlit run dashboard/app.py`) waiting on the user's review before
+  anyone sends anything, per their explicit choice this run. Next step
+  once reviewed: `python -m sender.send_approved` (still capped, still
+  needs pacing per the standing notes above, still on the
+  `hs210310222360@gmail.com` account and its current ramp).
