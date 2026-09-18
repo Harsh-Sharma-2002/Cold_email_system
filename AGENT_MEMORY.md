@@ -332,3 +332,23 @@ this line.)
   reply-detection MIME-type fix went in on 2026-09-14, worth the user
   actually checking that inbox to confirm it's a genuine reply and not
   another false positive.
+
+- 2026-09-17: **List prep only (no research/contacts/sends run), at the
+  user's request: "focus on startups" for tomorrow's run.** Inserted 15
+  new companies (ids 147-161), all `status='new'`: Traceloop, Helicone,
+  Portkey, Langfuse, Confident AI, Fiddler AI, WhyLabs, Arthur AI, SigNoz,
+  Composio, Browserbase, Firecrawl, Daytona, H Company, Cribl. All are
+  LLM/ML observability, tracing, or agent-infra startups; verified as
+  real and currently active via web search (not pulled from memory
+  alone, given the domain-mismatch/bounce history in this project), and
+  checked by name against the existing 146 companies first, no dupes.
+  Chosen to match `resume.txt`'s explicit OpenTelemetry/distributed-
+  tracing/observability language more tightly than the 09-17 agentic-
+  infra batch did (Traceloop, SigNoz, Portkey especially are
+  OpenTelemetry-native). Websites came from search results, not
+  hand-typed guesses, but haven't been through `research_company` yet,
+  so treat them as unverified until that stage runs.
+  **Apollo key is still exhausted (see standing note above)** — research
+  (Tavily-only) can proceed for these 15 regardless, but
+  `find_contacts`/`verify_with_provider` will not work until a new key
+  is added via `providers.enrichment.add_key()`.
